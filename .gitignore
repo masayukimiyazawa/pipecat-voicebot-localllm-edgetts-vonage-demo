@@ -1,0 +1,21 @@
+# Environment
+.env
+
+# Keys
+private.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/

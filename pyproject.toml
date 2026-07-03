@@ -1,0 +1,14 @@
+[project]
+name = "pipecat-voicebot-unifiedvideoapi-test"
+version = "0.1.0"
+description = "Pipecat voice bot using Vonage Unified Video Audio Connector + LM Studio + Piper-plus TTS"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[openai,websocket,silero,piper,runner,whisper,mlx-whisper]>=1.4.0",
+    "pyopenjtalk-plus",
+    "vonage>=3.3.1",
+    "vonage-video",
+    "python-dotenv",
+    "uvicorn[standard]",
+    "fastapi",
+]

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Bot — Vonage Demo</title>
+<script src="https://video.standard.vonage.com/v2/js/opentok.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  .container { max-width: 480px; width: 100%; padding: 24px; text-align: center; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; }
+  p { font-size: .8rem; color: #888; margin-bottom: 24px; }
+  button { padding: 12px 32px; font-size: 1rem; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 16px; transition: opacity .2s; }
+  button.connect { background: #22c55e; color: #fff; }
+  button.disconnect { background: #ef4444; color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .status { margin-top: 16px; font-size: .875rem; color: #aaa; }
+  .log { margin-top: 16px; max-height: 240px; overflow-y: auto; text-align: left; font-size: .75rem; color: #666; width: 100%; }
+  .log div { padding: 2px 0; }
+  #subscriberContainer { margin-top: 16px; }
+  #subscriberContainer video { max-width: 100%; border-radius: 8px; display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Voice Bot</h1>
+  <p>Vonage Unified Video API デモ</p>
+  <button id="connectBtn" class="connect" onclick="toggleConnect()">接続</button>
+  <div class="status" id="status">切断されています</div>
+  <div class="log" id="log"></div>
+  <div id="subscriberContainer"></div>
+</div>
+
+<script>
+const logEl = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const connectBtn = document.getElementById('connectBtn');
+const subscriberContainer = document.getElementById('subscriberContainer');
+
+let session = null;
+let publisher = null;
+let subscriber = null;
+
+function log(msg) {
+  const d = document.createElement('div');
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(s) { statusEl.textContent = s; }
+
+async function toggleConnect() {
+  if (session && session.isConnected()) {
+    disconnect();
+  } else {
+    await connect();
+  }
+}
+
+async function connect() {
+  connectBtn.disabled = true;
+  setStatus('セッション作成中...');
+  log('POST /demo/connect を呼び出し中...');
+
+  let data;
+  try {
+    const res = await fetch('/demo/connect', { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    data = await res.json();
+    log(`セッション作成完了: ${data.session_id.slice(0, 8)}...`);
+  } catch (e) {
+    log(`接続エラー: ${e.message}`);
+    setStatus('接続失敗');
+    connectBtn.disabled = false;
+    return;
+  }
+
+  const { application_id, session_id, token } = data;
+
+  session = OT.initSession(application_id, session_id);
+
+  session.on('streamCreated', (event) => {
+    log(`新しいストリームを検出: ${event.stream.streamId.slice(0, 8)}...`);
+    if (!subscriber) {
+      subscriber = session.subscribe(
+        event.stream,
+        subscriberContainer,
+        { audioOnly: true },
+        (err) => {
+          if (err) log(`購読エラー: ${err.message}`);
+          else log('購読開始');
+        }
+      );
+    }
+  });
+
+  session.on('streamDestroyed', () => {
+    log('ストリーム終了');
+    subscriber = null;
+  });
+
+  session.connect(token, (err) => {
+    if (err) {
+      log(`セッション接続エラー: ${err.message}`);
+      setStatus('接続失敗');
+      connectBtn.disabled = false;
+      return;
+    }
+    log('セッションに接続しました');
+    setStatus('会話中...');
+    connectBtn.textContent = '切断';
+    connectBtn.className = 'disconnect';
+
+    publisher = OT.initPublisher(
+      'subscriberContainer',
+      { videoSource: null, publishAudio: true },
+      (pubErr) => {
+        if (pubErr) log(`配信エラー: ${pubErr.message}`);
+        else log('音声配信開始');
+      }
+    );
+    session.publish(publisher, (pubErr) => {
+      if (pubErr) log(`publish エラー: ${pubErr.message}`);
+      else log('publish 成功');
+    });
+  });
+
+  connectBtn.disabled = false;
+}
+
+function disconnect() {
+  if (session) {
+    if (publisher) session.unpublish(publisher);
+    session.disconnect();
+    publisher = null;
+    subscriber = null;
+    session = null;
+  }
+  subscriberContainer.innerHTML = '';
+  setStatus('切断されています');
+  connectBtn.textContent = '接続';
+  connectBtn.className = 'connect';
+  log('切断完了');
+}
+</script>
+</body>
+</html>
