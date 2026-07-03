@@ -2,11 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-07-03
+## [Unreleased] - 2026-07-04
 
 ### Added
-- **VADProcessor for Reliable STT VAD**: Replaced embedded VAD in `LLMUserAggregator` with a standalone `VADProcessor` (from `pipecat.processors.audio.vad_processor`) placed **before STT** in the pipeline. This broadcasts `VADUserStartedSpeakingFrame` / `VADUserStoppedSpeakingFrame` **downstream** to STT instead of upstream, fixing voice input not being accepted on Video client reconnections. Previously STT only received VAD events upstream from the user_aggregator's VADController, which broke on second connection.
-- **Auto Greeting on Connection**: Added background tasks in `bot.py` that send an initial greeting TextFrame immediately and 3 seconds after connection, spoken via TTS without LLM involvement. Uses `asyncio.create_task` with `assistant_aggregator.push_frame()` to bypass the LLM and go directly to TTS.
+- **Edge TTS Support**: Replaced Bark TTS with `EdgeTTSService` (`tts_edge.py`) using Microsoft Edge TTS (`ja-JP-NanamiNeural`). Decodes MP3 output via PyAV, resamples from 24kHz to 16kHz, outputs int16 PCM.
+- **BufferingTextAggregator**: Custom aggregator that accumulates all LLM response text and synthesizes once per turn (via `LLMFullResponseEndFrame`), eliminating sentence-by-sentence gaps between audio segments.
+
+### Changed
+- **VAD Sensitivity**: Lowered `confidence` from 0.5 to 0.3 and `start_secs` from 0.2s to 0.1s for better speech detection.
+- **Greeting Delay**: Increased initial greeting delay from 2s to 10s after connection.
+- **Removed Bark TTS**: Deleted `tts_bark.py` and removed `"bark[all]"` dependency from `pyproject.toml`.
+
+### Fixed
+- **TTS Buffer Never Flushed**: Monkey-patched `LLMAssistantAggregator._handle_llm_end` to forward `LLMFullResponseEndFrame` downstream to TTS, so buffered text is actually synthesized.
+- **Greeting Not Synthesized**: Pushed `LLMFullResponseEndFrame` after greeting `TextFrame` to trigger TTS flush.
 
 ### Changed
 - **System Prompt Update**: Updated system instruction in `bot.py` to prevent alphabet reading/spelling (e.g. "A, B, C") and English conversation; the LLM now always responds in Japanese.

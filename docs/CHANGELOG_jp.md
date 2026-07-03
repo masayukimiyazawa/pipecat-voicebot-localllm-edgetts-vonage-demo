@@ -2,11 +2,20 @@
 
 このプロジェクトの全ての重要な変更はこのファイルに記録されます。
 
-## [Unreleased] - 2026-07-03
+## [Unreleased] - 2026-07-04
 
 ### 追加
-- **信頼性の高い STT VAD のための VADProcessor**: `LLMUserAggregator` 内の VAD を、パイプラインの **STT の前に** 配置されたスタンドアロンの `VADProcessor`（`pipecat.processors.audio.vad_processor` より）に置き換えました。これにより `VADUserStartedSpeakingFrame` / `VADUserStoppedSpeakingFrame` が上流ではなく **下流** へ STT にブロードキャストされ、Video クライアントの再接続時に音声入力が受け付けられなくなる問題を修正しました。以前は STT は user_aggregator の VADController からの上流の VAD イベントのみを受信していましたが、2回目の接続で機能しなくなっていました。
-- **接続時の自動挨拶**: `bot.py` に即時と3秒後の2つのバックグラウンドタスクを追加し、LLM を介さず TTS から挨拶テキストを発話します。`asyncio.create_task` と `assistant_aggregator.push_frame()` を使用して LLM をバイパスし、直接 TTS へフレームを送信します。
+- **Edge TTS 対応**: Bark TTS を `EdgeTTSService`（`tts_edge.py`）に置き換え、Microsoft Edge TTS（`ja-JP-NanamiNeural`）を使用。PyAV で MP3 をデコードし、24kHz→16kHz にリサンプル、int16 PCM を出力。
+- **BufferingTextAggregator**: LLM 応答テキストを全てバッファリングし、`LLMFullResponseEndFrame` 受信時に1回だけ合成するカスタムアグリゲーター。文ごとの切れ目を解消。
+
+### 変更
+- **VAD感度調整**: `confidence` を 0.5→0.3、`start_secs` を 0.2s→0.1s に低下。
+- **挨拶ディレイ**: 接続時の挨拶を 2秒後→10秒後に変更。
+- **Bark TTS 削除**: `tts_bark.py` を削除し、`pyproject.toml` から `"bark[all]"` 依存を除去。
+
+### 修正
+- **TTS バッファがフラッシュされない問題**: `LLMAssistantAggregator._handle_llm_end` をモンキーパッチで変更し、`LLMFullResponseEndFrame` を下流の TTS に転送。バッファリングされたテキストが実際に合成されるよう修正。
+- **挨拶が合成されない問題**: 挨拶 `TextFrame` の後に `LLMFullResponseEndFrame` をプッシュして TTS フラッシュをトリガー。
 
 ### 変更
 - **システムプロンプト更新**: `bot.py` のシステムインストラクションを更新し、アルファベットの読み上げや英会話を禁止。LLM は常に日本語で応答するようになりました。
@@ -24,7 +33,8 @@
 
 ### 変更
 - **モデル管理のグローバル化**: LLM/STT/TTS サービスをリクエストごとに生成 → グローバル変数で共有する方式に変更し、メモリ効率と応答速度を改善しました。
-- **VAD パラメータ調整**: 音声検出の感度を調整（`confidence: 0.7→0.5`, `start_secs: 0.3→0.2`, `stop_secs: 0.8→0.2`, `min_volume: 0.4→0.0`）。
+- **TTSの長文対応 (Chunking)**: `tts_irodori.py` において、長いテキストを句読点で適切に分割（チャンク化）してリクエストを送るように変更しました。これにより、TTSサーバーのタイムアウトや処理制限による音声の欠損を防止します。
+- **TTSタイムアウトの最適化**: `httpx` のタイムアウト設定を強化し、接続時および通信時の安定性を向上させました。
 - **オーディオデバッグログ**: `AudioFrameLogger` プロセッサを追加し、受信オーディオフレームのサイズとサンプルレートをログ出力するようにしました。
 - **接続ごとのトランスポート生成**: `FastAPIWebsocketTransport` の生成を `bot.py` から `server.py` に移動し、WebSocket 接続ごとに新しいトランスポートインスタンスが作成されるようにしました。これにより、前回の接続のバッファや状態が持ち越される問題を防止します。
 

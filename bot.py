@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 
 import numpy as np
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.whisper.stt import WhisperSTTServiceMLX, MLXModel
 from pipecat.transcriptions.language import Language
 from pipecat.services.settings import assert_given
-from tts_piper_plus import PiperPlusTTSService
+from tts_edge import EdgeTTSService
 from pipecat.serializers.vonage import VonageFrameSerializer
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.transports.websocket.fastapi import (
@@ -38,10 +39,15 @@ class AudioFrameLogger(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, InputAudioRawFrame):
-            logger.debug(f"AudioFrameLogger: received {len(frame.audio)} bytes @ {frame.sample_rate}Hz")
+            import numpy as np
+            samples = np.frombuffer(frame.audio, dtype=np.int16)
+            peak = int(np.abs(samples).max()) if len(samples) > 0 else 0
+            rms = int(np.sqrt(np.mean(samples.astype(np.float32)**2))) if len(samples) > 0 else 0
+            if peak > 500:
+                logger.debug(f"AudioFrameLogger: {len(frame.audio)}B @ {frame.sample_rate}Hz peak={peak} rms={rms}")
         await self.push_frame(frame, direction)
 
-# Monkey-patch LLMAssistantAggregator to forward TextFrames downstream to TTS.
+# Monkey-patch LLMAssistantAggregator to forward frames downstream to TTS.
 # Pipecat 1.4.0's _handle_text absorbs text for context but does not push
 # it to the next processor, starving the TTS service.
 _original_handle_text = LLMAssistantAggregator._handle_text
@@ -49,6 +55,13 @@ async def _forwarding_handle_text(self, frame: TextFrame):
     await _original_handle_text(self, frame)
     await self.push_frame(frame, FrameDirection.DOWNSTREAM)
 LLMAssistantAggregator._handle_text = _forwarding_handle_text
+
+# Also forward LLMFullResponseEndFrame so TTS flushes its audio buffer.
+_original_handle_llm_end = LLMAssistantAggregator._handle_llm_end
+async def _forwarding_handle_llm_end(self, frame):
+    await _original_handle_llm_end(self, frame)
+    await self.push_frame(frame, FrameDirection.DOWNSTREAM)
+LLMAssistantAggregator._handle_llm_end = _forwarding_handle_llm_end
 
 AUDIO_OUT_SAMPLE_RATE: int = 16_000
 
@@ -73,9 +86,10 @@ async def preload_models():
             model=LM_MODEL,
             system_instruction=(
                 "あなたは音声アシスタントです。"
-                "応答はテキスト読み上げで読まれるため、簡潔で会話調にしてください。"
+                "応答はテキスト読み上げで読まれるため、自然な会話調にしてください。"
                 "アルファベットの読み上げ（例: A, B, C）や英会話は行わず、常に日本語で応答してください。"
                 "記号やマークダウンは避けてください。"
+                "1回の応答は2〜3文程度で、やや詳しめに話してください。"
             ),
         ),
     )
@@ -88,7 +102,9 @@ async def preload_models():
         ),
     )
 
-    _tts_instance = PiperPlusTTSService()
+    _tts_instance = EdgeTTSService(
+        voice="ja-JP-NanamiNeural",
+    )
 
     # Force VAD model loading
     logger.info("Loading VAD model...")
@@ -253,9 +269,9 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, sample_rate: in
     vad_processor = VADProcessor(
         vad_analyzer=SileroVADAnalyzer(
             params=VADParams(
-                confidence=0.5,
-                start_secs=0.2,
-                stop_secs=0.2,
+                confidence=0.3,
+                start_secs=0.1,
+                stop_secs=0.3,
                 min_volume=0.0,
             ),
         ),
@@ -295,29 +311,24 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, sample_rate: in
         logger.info("Client disconnected. Ending session.")
         await worker.cancel()
 
-    async def _send_immediate_greeting():
-        await asyncio.sleep(0)
+    async def _send_delayed_greeting():
+        await asyncio.sleep(10)
         logger.info("Sending greeting...")
         await assistant_aggregator.push_frame(
-            TextFrame("こんにちは、私はAIエージェントです。どんな話題でもお付き合いします。今日はどんなお話をしましょうか？"),
+            TextFrame("こんにちは。私の声は聞こえていますか？これからいろいろなお話をしましょう。何か質問があれば何でも聞いてくださいね。"),
             FrameDirection.DOWNSTREAM,
         )
-
-    async def _send_delayed_greeting():
-        await asyncio.sleep(3)
-        logger.info("Sending delayed greeting...")
+        from pipecat.frames.frames import LLMFullResponseEndFrame
         await assistant_aggregator.push_frame(
-            TextFrame("こんにちは、私はAIエージェントです。どんな話題でもお付き合いします。今日はどんなお話をしましょうか？"),
+            LLMFullResponseEndFrame(),
             FrameDirection.DOWNSTREAM,
         )
 
     runner = WorkerRunner(handle_sigint=handle_sigint)
     await runner.add_workers(worker)
-    immediate_task = asyncio.create_task(_send_immediate_greeting())
-    delayed_task = asyncio.create_task(_send_delayed_greeting())
+    greeting_task = asyncio.create_task(_send_delayed_greeting())
     await runner.run()
-    immediate_task.cancel()
-    delayed_task.cancel()
+    greeting_task.cancel()
 
 
 async def bot(runner_args: WebSocketRunnerArguments, transport: FastAPIWebsocketTransport):

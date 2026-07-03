@@ -14,7 +14,7 @@ from pipecat.serializers.vonage import VonageFrameSerializer
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from vonage import Auth, HttpClientOptions, Vonage
 from vonage_video import AudioConnectorOptions, TokenOptions
-from vonage_video.models.audio_connector import AudioConnectorData
+from vonage_video.models.audio_connector import AudioConnectorData, AudioConnectorWebSocket
 
 load_dotenv(override=True)
 
@@ -103,11 +103,11 @@ async def _connect_audio_connector_async(
     audio_opts = AudioConnectorOptions(
         session_id=session_id,
         token=token,
-        websocket={
-            "uri": ws_uri,
-            "audioRate": audio_rate,
-            "bidirectional": True,
-        },
+        websocket=AudioConnectorWebSocket(
+            uri=ws_uri,
+            audio_rate=audio_rate,
+            bidirectional=True,
+        ),
     )
 
     loop = asyncio.get_running_loop()

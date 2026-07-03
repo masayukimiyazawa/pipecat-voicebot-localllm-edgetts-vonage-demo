@@ -87,7 +87,7 @@ async function connect() {
       subscriber = session.subscribe(
         event.stream,
         subscriberContainer,
-        { audioOnly: true },
+        { audioOnly: true, enableAudio: true },
         (err) => {
           if (err) log(`購読エラー: ${err.message}`);
           else log('購読開始');
