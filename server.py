@@ -120,10 +120,7 @@ async def _connect_audio_connector_async(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from bot import preload_models
-    
     logger.info("Server starting up...")
-    await preload_models()
     logger.info("Server ready to accept calls")
     yield
 

@@ -44,9 +44,9 @@ sleep 2
 cd "$SCRIPT_DIR" && nohup uv run python server.py > "$SERVER_LOG" 2>&1 &
 echo "Server PID: $!"
 
-# Wait for server to be ready (models are pre-loaded at startup, may take ~60s)
-echo "Waiting for server to start (model preloading)..."
-for i in $(seq 1 90); do
+# Wait for server to be ready
+echo "Waiting for server to start..."
+for i in $(seq 1 30); do
     if curl -s http://localhost:8005/health > /dev/null 2>&1; then
         echo "Server is UP!"
         break
