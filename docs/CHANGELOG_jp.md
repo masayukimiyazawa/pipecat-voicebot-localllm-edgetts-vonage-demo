@@ -4,6 +4,13 @@
 
 ## [Unreleased] - 2026-07-04
 
+### 修正
+- **Videoクライアントからの音声入力受信問題**: グローバルプリロード済みのSTT/LLM/TTSインスタンスを再利用する方式から、接続ごとに新規作成する方式に戻しました。`_reset_service()` による内部状態のリセットが不完全だったため、音声入力フレームがSTTに届かない問題が発生していました。これにより、旧バージョン同等の音声認識精度と入力受信が復元されました。
+- **VADパラメータの最適化**: `VADProcessor` の削除と、`LLMUserAggregatorParams` 内のVAD設定を旧バージョンの値に戻しました: `confidence=0.7`, `start_secs=0.3`, `stop_secs=0.8`, `min_volume=0.4`。これにより、音声検出の精度が向上しました。
+- **パイプライン構成の簡素化**: 不要な `VADProcessor` と `AudioFrameLogger` を削除し、パイプラインを `transport.input() → stt → user_aggregator → llm → assistant_aggregator → tts → transport.output()` に戻しました。
+- **Smart Turn Analyzerのプリロード削除**: `LocalSmartTurnAnalyzerV3` のプリロードを削除しました。
+- **モデルプリロードの削除**: `preload_models()`, `get_llm()`, `get_stt()`, `get_tts()` を削除し、サーバー起動時の待機時間を短縮しました。
+
 ### 追加
 - **Edge TTS 対応**: Bark TTS を `EdgeTTSService`（`tts_edge.py`）に置き換え、Microsoft Edge TTS（`ja-JP-NanamiNeural`）を使用。PyAV で MP3 をデコードし、24kHz→16kHz にリサンプル、int16 PCM を出力。
 - **BufferingTextAggregator**: LLM 応答テキストを全てバッファリングし、`LLMFullResponseEndFrame` 受信時に1回だけ合成するカスタムアグリゲーター。文ごとの切れ目を解消。

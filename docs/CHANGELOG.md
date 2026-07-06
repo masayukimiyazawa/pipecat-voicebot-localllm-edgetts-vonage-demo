@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-07-04
 
+### Fixed
+- **Video Client Voice Input Reception**: Changed from reusing globally preloaded STT/LLM/TTS instances to creating new instances per connection. The `_reset_service()` approach was incomplete in clearing internal state, causing audio input frames to not reach the STT service. This restores voice recognition accuracy and input reception equivalent to the old version.
+- **VAD Parameter Optimization**: Removed `VADProcessor` and reverted VAD settings in `LLMUserAggregatorParams` to old version values: `confidence=0.7`, `start_secs=0.3`, `stop_secs=0.8`, `min_volume=0.4`. This improved speech detection accuracy.
+- **Pipeline Simplification**: Removed unnecessary `VADProcessor` and `AudioFrameLogger`, restoring pipeline to `transport.input() → stt → user_aggregator → llm → assistant_aggregator → tts → transport.output()`.
+- **Smart Turn Analyzer Preload Removal**: Removed `LocalSmartTurnAnalyzerV3` preloading.
+- **Model Preload Removal**: Removed `preload_models()`, `get_llm()`, `get_stt()`, `get_tts()` to reduce server startup time.
+
 ### Added
 - **Edge TTS Support**: Replaced Bark TTS with `EdgeTTSService` (`tts_edge.py`) using Microsoft Edge TTS (`ja-JP-NanamiNeural`). Decodes MP3 output via PyAV, resamples from 24kHz to 16kHz, outputs int16 PCM.
 - **BufferingTextAggregator**: Custom aggregator that accumulates all LLM response text and synthesizes once per turn (via `LLMFullResponseEndFrame`), eliminating sentence-by-sentence gaps between audio segments.
