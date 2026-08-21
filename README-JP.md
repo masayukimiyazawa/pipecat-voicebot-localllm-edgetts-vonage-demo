@@ -155,6 +155,10 @@ pkill -f server.py && pkill -f cloudflared
 
 ボットは接続10秒後に TTS で挨拶します。以降のユーザー発話は STT → LLM → TTS で処理されます。
 
+## デモ動画
+
+https://youtu.be/rJUi4qRV0v4?si=rOaV3trFJpBU3oWW
+
 ### 音声モード（電話 → Voice API → Webhook）
 
 1. Vonage ダッシュボードで Answer URL に `https://<tunnel-url>/voice/webhook` を設定

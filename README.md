@@ -154,6 +154,10 @@ pkill -f server.py && pkill -f cloudflared
 
 The bot greets the user 10 seconds after connection via TTS. Subsequent user speech follows: STT → LLM → TTS.
 
+## Demo Video Clip (Japanese)
+
+https://youtu.be/rJUi4qRV0v4?si=rOaV3trFJpBU3oWW
+
 ### Voice Mode (Phone Call → Voice API → Webhook)
 
 1. Set your Vonage Voice API Answer URL to `https://<tunnel-url>/voice/webhook`
